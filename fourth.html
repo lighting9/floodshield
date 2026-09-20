@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HydroGrid | Advanced Flood Simulation</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --bg-base: #090d16;
+            --bg-panel: rgba(15, 23, 42, 0.75);
+            --bg-panel-solid: #0f172a;
+            --accent: #10b981; /* Emerald */
+            --accent-glow: rgba(16, 185, 129, 0.25);
+            --accent-hover: #059669;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: rgba(51, 65, 85, 0.6);
+            --danger: #f43f5e;
+            --danger-glow: rgba(244, 63, 94, 0.2);
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Modern Glassmorphic Sidebar */
+        sidebar {
+            width: 400px;
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 18px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), #047857);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            color: #ffffff;
+        }
+
+        .section {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .instruction-box {
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #6ee7b7;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            line-height: 1.45;
+        }
+
+        .btn {
+            background-color: var(--accent);
+            color: #064e3b;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.875rem;
+            box-shadow: 0 4px 14px var(--accent-glow);
+        }
+
+        .btn:hover:not(:disabled) {
+            background-color: #34d399;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            background-color: rgba(51, 65, 85, 0.5);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background-color: rgba(51, 65, 85, 0.7);
+            color: var(--text-main);
+            box-shadow: none;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background-color: #475569;
+        }
+
+        .btn-danger {
+            background-color: rgba(244, 63, 94, 0.15);
+            color: #fb7185;
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            box-shadow: none;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 0.825rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        label span {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            height: 6px;
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        /* Workspace & Map */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+            background: #000;
+        }
+
+        /* Floating Modern HUD Overlay */
+        .hud-overlay {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            width: 300px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: #34d399;
+        }
+
+        .stat-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .legend-gradient {
+            flex: 1;
+            height: 8px;
+            margin: 0 10px;
+            background: linear-gradient(to right, #22c55e, #eab308, #3b82f6, #1e3a8a);
+            border-radius: 4px;
+        }
+
+        .tool-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tool-btn {
+            flex: 1;
+            background: rgba(51, 65, 85, 0.4);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 8px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .tool-btn.active {
+            background: var(--accent);
+            color: #064e3b;
+            border-color: var(--accent);
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .cell-inspector-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: var(--text-muted);
+        }
+
+        .cell-inspector-text strong {
+            color: var(--text-main);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Control Panel -->
+    <sidebar>
+        <div class="brand">
+            <div class="brand-icon">💧</div>
+            <h1>HydroGrid Simulation</h1>
+        </div>
+
+        <div class="instruction-box" id="step-instruction">
+            <strong>Step 1:</strong> Select the rectangle drawing tool in the top-left corner of the map to define your study area.
+        </div>
+
+        <!-- Selection Status -->
+        <div class="section">
+            <span class="section-title">Spatial Bounding Box</span>
+            <div id="bbox-status" style="font-size: 0.825rem; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">
+                No region selected.
+            </div>
+            <button class="btn" id="generate-grid-btn" disabled>Initialize Simulation Grid</button>
+        </div>
+
+        <!-- Hydrology Controls -->
+        <div class="section" id="sim-controls-section" style="opacity: 0.4; pointer-events: none;">
+            <span class="section-title">Hydraulic Engine</span>
+            
+            <div class="control-group">
+                <label>Inflow Rate <span id="val-inflow">1.0 m³/s</span></label>
+                <input type="range" id="inflow-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="tool-selector" style="margin-top: 4px;">
+                <button class="tool-btn active" id="tool-source">📍 Water Source</button>
+                <button class="tool-btn" id="tool-barrier">🧱 Dam / Barrier</button>
+            </div>
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 2px;" id="tool-hint">
+                Click map cells to place inflow source points.
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
+                <button class="btn" id="start-btn" style="flex: 1;">▶ Start</button>
+                <button class="btn btn-secondary" id="pause-btn" style="flex: 1;" disabled>⏸ Pause</button>
+                <button class="btn btn-danger" id="reset-btn" style="flex: 0.5;">↺ Reset</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <span class="section-title">Cell Inspector</span>
+            <div class="cell-inspector-text" id="cell-info">
+                Hover over grid cells on the map to inspect terrain elevation and active water depth.
+            </div>
+        </div>
+    </sidebar>
+
+    <!-- Workspace & Map -->
+    <div class="workspace">
+        <div id="map"></div>
+
+        <!-- Floating HUD Box -->
+        <div class="hud-overlay" id="sim-hud">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; font-size: 0.85rem; letter-spacing: -0.01em;">Simulation Telemetry</span>
+                <span id="sim-time" style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; color: #34d399;">00:00</span>
+            </div>
+
+            <div class="legend">
+                <span>Terrain</span>
+                <div class="legend-gradient"></div>
+                <span>Flood Depth</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-volume">0 m³</div>
+                    <div class="stat-label">Water Volume</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-flooded">0%</div>
+                    <div class="stat-label">Inundated Area</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet & Leaflet Draw JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <script>
+        // Initialize Map using CartoDB Voyager tiles (Clean, watermark-free vector/raster view)
+        const map = L.map('map').setView([45.4408, 12.3155], 13);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        const drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems,
+                edit: false,
+                remove: true
+            },
+            draw: {
+                polygon: false,
+                polyline: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                rectangle: {
+                    shapeOptions: {
+                        color: '#10b981',
+                        weight: 2.5,
+                        fillOpacity: 0.15
+                    }
+                }
+            }
+        });
+        map.addControl(drawControl);
+
+        let selectedBounds = null;
+        let gridData = null;
+        let simInterval = null;
+        let simTimeSteps = 0;
+        let activeTool = 'source'; // 'source' or 'barrier'
+        let gridLayerGroup = L.layerGroup().addTo(map);
+
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers();
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            selectedBounds = layer.getBounds();
+
+            const s = selectedBounds.getSouth().toFixed(3);
+            const n = selectedBounds.getNorth().toFixed(3);
+            const w = selectedBounds.getWest().toFixed(3);
+            const eCoord = selectedBounds.getEast().toFixed(3);
+
+            document.getElementById('bbox-status').innerHTML = `
+                S: ${s}, N: ${n}<br>W: ${w}, E: ${eCoord}
+            `;
+            document.getElementById('step-instruction').innerHTML = '<strong>Step 2:</strong> Click <strong>Initialize Simulation Grid</strong> to generate elevation matrix.';
+            document.getElementById('generate-grid-btn').disabled = false;
+        });
+
+        map.on(L.Draw.Event.DELETED, function () {
+            selectedBounds = null;
+            gridLayerGroup.clearLayers();
+            document.getElementById('bbox-status').innerText = 'No region selected.';
+            document.getElementById('generate-grid-btn').disabled = true;
+            document.getElementById('sim-controls-section').style.opacity = '0.4';
+            document.getElementById('sim-controls-section').style.pointerEvents = 'none';
+            document.getElementById('sim-hud').style.display = 'none';
+        });
+
+        // Grid Simulation Engine State
+        const GRID_DIM = 25; // 25x25 geographic cells on map
+        class SimulationGrid {
+            constructor(bounds) {
+                this.bounds = bounds;
+                this.cols = GRID_DIM;
+                this.rows = GRID_DIM;
+                
+                this.elevation = Array(this.rows).fill(0).map(() => Array(this.cols).fill(0));
+                this.water = Array(this.rows).fill(0).map(() => Array(this.cols).fill(0));
+                this.sources = Array(this.rows).fill(0).map(() => Array(this.cols).fill(false));
+                this.barriers = Array(this.rows).fill(0).map(() => Array(this.cols).fill(false));
+                
+                this.generateSyntheticElevation();
+            }
+
+            generateSyntheticElevation() {
+                const cx = this.cols / 2;
+                const cy = this.rows / 2;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        const dx = (c - cx) / (this.cols / 2);
+                        const dy = (r - cy) / (this.rows / 2);
+                        const base = (dx * dx + dy * dy) * 16;
+                        const noise = Math.sin(c * 0.4) * Math.cos(r * 0.4) * 2.5;
+                        this.elevation[r][c] = Math.max(0, Math.round((base + noise + 6) * 10) / 10);
+                    }
+                }
+                this.sources[Math.floor(this.rows / 2)][Math.floor(this.cols / 2)] = true;
+            }
+
+            step(inflowRate) {
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.sources[r][c] && !this.barriers[r][c]) {
+                            this.water[r][c] += inflowRate * 0.1;
+                        }
+                    }
+                }
+
+                const newWater = this.water.map(row => [...row]);
+                const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.barriers[r][c]) continue;
+                        
+                        const totalHeadCurrent = this.elevation[r][c] + this.water[r][c];
+
+                        for (let [dr, dc] of directions) {
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols && !this.barriers[nr][nc]) {
+                                const totalHeadNeighbor = this.elevation[nr][nc] + this.water[nr][nc];
+                                const diff = totalHeadCurrent - totalHeadNeighbor;
+                                if (diff > 0.05 && this.water[r][c] > 0.01) {
+                                    const transfer = diff * 0.15;
+                                    const actualTransfer = Math.min(transfer, this.water[r][c]);
+                                    newWater[r][c] -= actualTransfer;
+                                    newWater[nr][nc] += actualTransfer;
+                                }
+                            }
+                        }
+                    }
+                }
+                this.water = newWater;
+            }
+
+            getTotalVolume() {
+                let vol = 0;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        vol += this.water[r][c];
+                    }
+                }
+                return Math.round(vol * 100);
+            }
+
+            getFloodedPercentage() {
+                let count = 0;
+                let total = this.rows * this.cols;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.water[r][c] > 0.05) count++;
+                    }
+                }
+                return Math.round((count / total) * 100);
+            }
+        }
+
+        document.getElementById('generate-grid-btn').addEventListener('click', () => {
+            if (!selectedBounds) return;
+            gridData = new SimulationGrid(selectedBounds);
+            
+            document.getElementById('sim-controls-section').style.opacity = '1';
+            document.getElementById('sim-controls-section').style.pointerEvents = 'auto';
+            document.getElementById('sim-hud').style.display = 'flex';
+            document.getElementById('step-instruction').innerHTML = '<strong>Step 3:</strong> Start simulation and click cells on the map to modify sources or construct dams.';
+            
+            renderGridOnMap();
+        });
+
+        function getCellColor(elev, waterDepth, isBarrier, isSource) {
+            if (isBarrier) return '#334155'; // Slate dark grey for dam
+            if (isSource) return '#f43f5e'; // Rose red for active source
+            if (waterDepth > 0.05) {
+                const intensity = Math.min(waterDepth / 5, 1);
+                return intensity > 0.5 ? '#1e3a8a' : '#3b82f6'; // Deep to royal blue for water
+            }
+            // Terrain gradient (Valleys to Ridges)
+            if (elev < 8) return '#22c55e'; // Lowland green
+            if (elev < 18) return '#eab308'; // Midland yellow
+            return '#b45309'; // Highland brown
+        }
+
+        function renderGridOnMap() {
+            if (!gridData || !selectedBounds) return;
+            gridLayerGroup.clearLayers();
+
+            const south = selectedBounds.getSouth();
+            const north = selectedBounds.getNorth();
+            const west = selectedBounds.getWest();
+            const east = selectedBounds.getEast();
+
+            const latStep = (north - south) / gridData.rows;
+            const lngStep = (east - west) / gridData.cols;
+
+            for (let r = 0; r < gridData.rows; r++) {
+                for (let c = 0; c < gridData.cols; c++) {
+                    const cellSouth = north - (r + 1) * latStep;
+                    const cellNorth = north - r * latStep;
+                    const cellWest = west + c * lngStep;
+                    const cellEast = west + (c + 1) * lngStep;
+
+                    const bounds = [[cellSouth, cellWest], [cellNorth, cellEast]];
+                    const elev = gridData.elevation[r][c];
+                    const waterDepth = gridData.water[r][c];
+                    const isBarrier = gridData.barriers[r][c];
+                    const isSource = gridData.sources[r][c];
+
+                    const fillColor = getCellColor(elev, waterDepth, isBarrier, isSource);
+                    const fillOpacity = (waterDepth > 0.05 || isBarrier || isSource) ? 0.75 : 0.45;
+
+                    const rect = L.rectangle(bounds, {
+                        color: 'rgba(15, 23, 42, 0.3)',
+                        weight: 0.5,
+                        fillColor: fillColor,
+                        fillOpacity: fillOpacity
+                    });
+
+                    rect.on('click', () => {
+                        if (activeTool === 'source') {
+                            gridData.sources[r][c] = !gridData.sources[r][c];
+                            if (gridData.sources[r][c]) gridData.barriers[r][c] = false;
+                        } else if (activeTool === 'barrier') {
+                            gridData.barriers[r][c] = !gridData.barriers[r][c];
+                            if (gridData.barriers[r][c]) gridData.sources[r][c] = false;
+                        }
+                        renderGridOnMap();
+                    });
+
+                    rect.on('mouseover', () => {
+                        const barrierStatus = isBarrier ? 'Yes (Blocked)' : 'No';
+                        document.getElementById('cell-info').innerHTML = `
+                            Cell [${r}, ${c}]<br>
+                            Elevation: <strong>${elev} m</strong><br>
+                            Water Depth: <strong>${waterDepth.toFixed(2)} m</strong><br>
+                            Dam Barrier: <strong>${barrierStatus}</strong>
+                        `;
+                    });
+
+                    gridLayerGroup.addLayer(rect);
+                }
+            }
+
+            document.getElementById('stat-volume').innerText = gridData.getTotalVolume() + ' m³';
+            document.getElementById('stat-flooded').innerText = gridData.getFloodedPercentage() + '%';
+        }
+
+        document.getElementById('tool-source').addEventListener('click', () => {
+            activeTool = 'source';
+            document.getElementById('tool-source').classList.add('active');
+            document.getElementById('tool-barrier').classList.remove('active');
+            document.getElementById('tool-hint').innerText = 'Click map cells to place inflow source points.';
+        });
+
+        document.getElementById('tool-barrier').addEventListener('click', () => {
+            activeTool = 'barrier';
+            document.getElementById('tool-barrier').classList.add('active');
+            document.getElementById('tool-source').classList.remove('active');
+            document.getElementById('tool-hint').innerText = 'Click map cells to construct/remove dam barriers.';
+        });
+
+        const inflowSlider = document.getElementById('inflow-slider');
+        inflowSlider.addEventListener('input', (e) => {
+            document.getElementById('val-inflow').innerText = parseFloat(e.target.value).toFixed(1) + ' m³/s';
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (!gridData) return;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('pause-btn').disabled = false;
+
+            const inflowRate = parseFloat(inflowSlider.value);
+
+            if (simInterval) clearInterval(simInterval);
+            simInterval = setInterval(() => {
+                gridData.step(inflowRate);
+                simTimeSteps++;
+                
+                const mins = Math.floor(simTimeSteps / 60).toString().padStart(2, '0');
+                const secs = (simTimeSteps % 60).toString().padStart(2, '0');
+                document.getElementById('sim-time').innerText = `${mins}:${secs}`;
+
+                renderGridOnMap();
+            }, 120);
+        });
+
+        document.getElementById('pause-btn').addEventListener('click', () => {
+            if (simInterval) clearInterval(simInterval);
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (simInterval) clearInterval(simInterval);
+            simTimeSteps = 0;
+            document.getElementById('sim-time').innerText = '00:00';
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+            if (selectedBounds) {
+                gridData = new SimulationGrid(selectedBounds);
+                renderGridOnMap();
+            }
+        });
+    </script>
+</body>
+</html>
