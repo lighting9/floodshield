@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Grid-Based Flood Simulation</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar Control Panel */
+        sidebar {
+            width: 380px;
+            background-color: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .instruction-box {
+            background: #1e3a8a;
+            border: 1px solid #3b82f6;
+            color: #93c5fd;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+
+        .btn:disabled {
+            background-color: var(--border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: #475569;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background-color: #334155;
+        }
+
+        .btn-danger {
+            background-color: #dc2626;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background-color: #b91c1c;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--primary);
+        }
+
+        /* Main Workspace Container */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+            background: #000;
+        }
+
+        /* Simulation Canvas Overlay */
+        .sim-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            width: 320px;
+        }
+
+        canvas {
+            background: #0b0f19;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            width: 100%;
+            height: 200px;
+            cursor: crosshair;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #60a5fa;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .legend-gradient {
+            flex: 1;
+            height: 10px;
+            margin: 0 8px;
+            background: linear-gradient(to right, #22c55e, #eab308, #3b82f6, #1e3a8a);
+            border-radius: 3px;
+        }
+
+        .tool-selector {
+            display: flex;
+            gap: 6px;
+        }
+
+        .tool-btn {
+            flex: 1;
+            background: var(--border);
+            border: none;
+            color: var(--text-main);
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .tool-btn.active {
+            background: var(--primary);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Controls -->
+    <sidebar>
+        <h1>🌊 Grid Flood Simulator</h1>
+
+        <div class="instruction-box" id="step-instruction">
+            <strong>Step 1:</strong> Use the rectangle drawing tool on the top-left of the map to select your target geographic area.
+        </div>
+
+        <!-- Selection Status -->
+        <div class="section">
+            <span class="section-title">Selected Bounding Box</span>
+            <div id="bbox-status" style="font-size: 0.85rem; color: var(--text-muted);">
+                No area selected yet.
+            </div>
+            <button class="btn" id="generate-grid-btn" disabled>Create Simulation Grid</button>
+        </div>
+
+        <!-- Hydrology Controls -->
+        <div class="section" id="sim-controls-section" style="opacity: 0.5; pointer-events: none;">
+            <span class="section-title">Simulation Engine</span>
+            
+            <div class="control-group">
+                <label>Inflow Rate (Source) <span id="val-inflow">1.0 m³/s</span></label>
+                <input type="range" id="inflow-slider" min="0.1" max="5.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="tool-selector" style="margin-top: 5px;">
+                <button class="tool-btn active" id="tool-source">📍 Add Water Source</button>
+                <button class="tool-btn" id="tool-barrier">🧱 Block Cell (Dam)</button>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 2px;" id="tool-hint">
+                Click grid cells to add water input source.
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 5px;">
+                <button class="btn" id="start-btn" style="flex: 1;">▶ Start</button>
+                <button class="btn btn-secondary" id="pause-btn" style="flex: 1;" disabled>⏸ Pause</button>
+                <button class="btn btn-danger" id="reset-btn" style="flex: 0.5;">↺ Reset</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <span class="section-title">Cell Inspector</span>
+            <div id="cell-info" style="font-size: 0.85rem; color: var(--text-muted);">
+                Hover or click on grid cells during simulation to inspect elevation and water depth.
+            </div>
+        </div>
+    </sidebar>
+
+    <!-- Workspace & Map -->
+    <div class="workspace">
+        <div id="map"></div>
+
+        <!-- Simulation Overlay Box -->
+        <div class="sim-container" id="sim-hud">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 700; font-size: 0.9rem;">Simulation Monitor</span>
+                <span id="sim-time" style="font-size: 0.8rem; color: #60a5fa;">Time: 00:00</span>
+            </div>
+
+            <canvas id="sim-canvas"></canvas>
+
+            <div class="legend">
+                <span>Dry</span>
+                <div class="legend-gradient"></div>
+                <span>Deep Water</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-volume">0 m³</div>
+                    <div class="stat-label">Total Water Volume</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-flooded">0%</div>
+                    <div class="stat-label">Flooded Area</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet & Leaflet Draw JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <script>
+        // Initialize Map using CartoDB Voyager tiles (Uses OpenStreetMap data cleanly without access block / watermarks)
+        const map = L.map('map').setView([45.4408, 12.3155], 13);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        }).addTo(map);
+
+        // Feature Group for Drawn items
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        // Draw Control
+        const drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems,
+                edit: false,
+                remove: true
+            },
+            draw: {
+                polygon: false,
+                polyline: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                rectangle: {
+                    shapeOptions: {
+                        color: '#2563eb',
+                        weight: 3,
+                        fillOpacity: 0.2
+                    }
+                }
+            }
+        });
+        map.addControl(drawControl);
+
+        let selectedBounds = null;
+        let gridData = null;
+        let simInterval = null;
+        let simTimeSteps = 0;
+        let activeTool = 'source'; // 'source' or 'barrier'
+
+        // Handle Map Draw Events
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers();
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            selectedBounds = layer.getBounds();
+
+            const s = selectedBounds.getSouth().toFixed(4);
+            const n = selectedBounds.getNorth().toFixed(4);
+            const w = selectedBounds.getWest().toFixed(4);
+            const eCoord = selectedBounds.getEast().toFixed(4);
+
+            document.getElementById('bbox-status').innerHTML = `
+                Lat: ${s} to ${n}<br>
+                Lng: ${w} to ${eCoord}
+            `;
+            document.getElementById('step-instruction').innerHTML = '<strong>Step 2:</strong> Click <strong>Create Simulation Grid</strong> below to build the grid for this area.';
+            document.getElementById('generate-grid-btn').disabled = false;
+        });
+
+        map.on(L.Draw.Event.DELETED, function () {
+            selectedBounds = null;
+            document.getElementById('bbox-status').innerText = 'No area selected yet.';
+            document.getElementById('generate-grid-btn').disabled = true;
+            document.getElementById('sim-controls-section').style.opacity = '0.5';
+            document.getElementById('sim-controls-section').style.pointerEvents = 'none';
+            document.getElementById('sim-hud').style.display = 'none';
+        });
+
+        // Grid Simulation Engine State
+        const GRID_DIM = 40; // 40x40 grid cells
+        class SimulationGrid {
+            constructor(bounds) {
+                this.bounds = bounds;
+                this.cols = GRID_DIM;
+                this.rows = GRID_DIM;
+                
+                this.elevation = Array(this.rows).fill(0).map(() => Array(this.cols).fill(0));
+                this.water = Array(this.rows).fill(0).map(() => Array(this.cols).fill(0));
+                this.sources = Array(this.rows).fill(0).map(() => Array(this.cols).fill(false));
+                this.barriers = Array(this.rows).fill(0).map(() => Array(this.cols).fill(false));
+                
+                this.generateSyntheticElevation();
+            }
+
+            generateSyntheticElevation() {
+                const cx = this.cols / 2;
+                const cy = this.rows / 2;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        const dx = (c - cx) / (this.cols / 2);
+                        const dy = (r - cy) / (this.rows / 2);
+                        const base = (dx * dx + dy * dy) * 15;
+                        const noise = Math.sin(c * 0.5) * Math.cos(r * 0.5) * 2;
+                        this.elevation[r][c] = Math.max(0, Math.round((base + noise + 5) * 10) / 10);
+                    }
+                }
+                this.sources[Math.floor(this.rows / 2)][Math.floor(this.cols / 2)] = true;
+            }
+
+            step(inflowRate) {
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.sources[r][c] && !this.barriers[r][c]) {
+                            this.water[r][c] += inflowRate * 0.1;
+                        }
+                    }
+                }
+
+                const newWater = this.water.map(row => [...row]);
+                const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.barriers[r][c]) continue;
+                        
+                        const totalHeadCurrent = this.elevation[r][c] + this.water[r][c];
+
+                        for (let [dr, dc] of directions) {
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < this.rows && nc >= 0 && nc < this.cols && !this.barriers[nr][nc]) {
+                                const totalHeadNeighbor = this.elevation[nr][nc] + this.water[nr][nc];
+                                const diff = totalHeadCurrent - totalHeadNeighbor;
+                                if (diff > 0.05 && this.water[r][c] > 0.01) {
+                                    const transfer = diff * 0.15;
+                                    const actualTransfer = Math.min(transfer, this.water[r][c]);
+                                    newWater[r][c] -= actualTransfer;
+                                    newWater[nr][nc] += actualTransfer;
+                                }
+                            }
+                        }
+                    }
+                }
+                this.water = newWater;
+            }
+
+            getTotalVolume() {
+                let vol = 0;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        vol += this.water[r][c];
+                    }
+                }
+                return Math.round(vol * 100);
+            }
+
+            getFloodedPercentage() {
+                let count = 0;
+                let total = this.rows * this.cols;
+                for (let r = 0; r < this.rows; r++) {
+                    for (let c = 0; c < this.cols; c++) {
+                        if (this.water[r][c] > 0.05) count++;
+                    }
+                }
+                return Math.round((count / total) * 100);
+            }
+        }
+
+        document.getElementById('generate-grid-btn').addEventListener('click', () => {
+            if (!selectedBounds) return;
+            gridData = new SimulationGrid(selectedBounds);
+            
+            document.getElementById('sim-controls-section').style.opacity = '1';
+            document.getElementById('sim-controls-section').style.pointerEvents = 'auto';
+            document.getElementById('sim-hud').style.display = 'flex';
+            document.getElementById('step-instruction').innerHTML = '<strong>Step 3:</strong> Use simulation controls to start and test water routing.';
+            
+            drawGridToCanvas();
+        });
+
+        const canvas = document.getElementById('sim-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawGridToCanvas() {
+            if (!gridData) return;
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+
+            const cellW = canvas.width / gridData.cols;
+            const cellH = canvas.height / gridData.rows;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let r = 0; r < gridData.rows; r++) {
+                for (let c = 0; c < gridData.cols; c++) {
+                    const elev = gridData.elevation[r][c];
+                    const waterDepth = gridData.water[r][c];
+                    const isBarrier = gridData.barriers[r][c];
+                    const isSource = gridData.sources[r][c];
+
+                    if (isBarrier) {
+                        ctx.fillStyle = '#64748b'; // Solid gray wall barrier color
+                    } else if (waterDepth > 0.05) {
+                        const intensity = Math.min(waterDepth / 5, 1);
+                        ctx.fillStyle = `rgba(59, 130, 246, ${0.3 + intensity * 0.7})`;
+                    } else {
+                        const shade = Math.min(elev / 30, 1);
+                        const colVal = Math.floor(30 + shade * 40);
+                        ctx.fillStyle = `rgb(${colVal}, ${colVal + 10}, ${colVal + 20})`;
+                    }
+
+                    ctx.fillRect(c * cellW, r * cellH, cellW + 0.5, cellH + 0.5);
+
+                    if (isSource && !isBarrier) {
+                        ctx.fillStyle = '#ef4444';
+                        ctx.beginPath();
+                        ctx.arc((c + 0.5) * cellW, (r + 0.5) * cellH, Math.min(cellW, cellH) * 0.3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            document.getElementById('stat-volume').innerText = gridData.getTotalVolume() + ' m³';
+            document.getElementById('stat-flooded').innerText = gridData.getFloodedPercentage() + '%';
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (!gridData) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const c = Math.floor((x / canvas.clientWidth) * gridData.cols);
+            const r = Math.floor((y / canvas.clientHeight) * gridData.rows);
+
+            if (r >= 0 && r < gridData.rows && c >= 0 && c < gridData.cols) {
+                if (activeTool === 'source') {
+                    gridData.sources[r][c] = !gridData.sources[r][c];
+                    if (gridData.sources[r][c]) gridData.barriers[r][c] = false;
+                } else if (activeTool === 'barrier') {
+                    gridData.barriers[r][c] = !gridData.barriers[r][c];
+                    if (gridData.barriers[r][c]) gridData.sources[r][c] = false;
+                }
+                drawGridToCanvas();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gridData) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const c = Math.floor((x / canvas.clientWidth) * gridData.cols);
+            const r = Math.floor((y / canvas.clientHeight) * gridData.rows);
+
+            if (r >= 0 && r < gridData.rows && c >= 0 && c < gridData.cols) {
+                const elev = gridData.elevation[r][c];
+                const water = gridData.water[r][c].toFixed(2);
+                const isBarrier = gridData.barriers[r][c] ? 'Yes (Blocked)' : 'No';
+                document.getElementById('cell-info').innerHTML = `
+                    Grid Cell [${r}, ${c}]<br>
+                    Elevation: <strong>${elev} m</strong><br>
+                    Water Depth: <strong>${water} m</strong><br>
+                    Blocked Barrier: <strong>${isBarrier}</strong>
+                `;
+            }
+        });
+
+        document.getElementById('tool-source').addEventListener('click', () => {
+            activeTool = 'source';
+            document.getElementById('tool-source').classList.add('active');
+            document.getElementById('tool-barrier').classList.remove('active');
+            document.getElementById('tool-hint').innerText = 'Click grid cells to toggle water inflow source.';
+        });
+
+        document.getElementById('tool-barrier').addEventListener('click', () => {
+            activeTool = 'barrier';
+            document.getElementById('tool-barrier').classList.add('active');
+            document.getElementById('tool-source').classList.remove('active');
+            document.getElementById('tool-hint').innerText = 'Click grid cells to block/unblock water flow.';
+        });
+
+        const inflowSlider = document.getElementById('inflow-slider');
+        inflowSlider.addEventListener('input', (e) => {
+            document.getElementById('val-inflow').innerText = parseFloat(e.target.value).toFixed(1) + ' m³/s';
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (!gridData) return;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('pause-btn').disabled = false;
+
+            const inflowRate = parseFloat(inflowSlider.value);
+
+            if (simInterval) clearInterval(simInterval);
+            simInterval = setInterval(() => {
+                gridData.step(inflowRate);
+                simTimeSteps++;
+                
+                const mins = Math.floor(simTimeSteps / 60).toString().padStart(2, '0');
+                const secs = (simTimeSteps % 60).toString().padStart(2, '0');
+                document.getElementById('sim-time').innerText = `Time: ${mins}:${secs}`;
+
+                drawGridToCanvas();
+            }, 100);
+        });
+
+        document.getElementById('pause-btn').addEventListener('click', () => {
+            if (simInterval) clearInterval(simInterval);
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (simInterval) clearInterval(simInterval);
+            simTimeSteps = 0;
+            document.getElementById('sim-time').innerText = 'Time: 00:00';
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+            if (selectedBounds) {
+                gridData = new SimulationGrid(selectedBounds);
+                drawGridToCanvas();
+            }
+        });
+    </script>
+</body>
+</html>
