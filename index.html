@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -9,6 +10,9 @@
     <!-- Leaflet CSS and JS for Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet Draw Plugin for interactive bounding box selection -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <!-- FontAwesome for UI icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -30,7 +34,7 @@
             </div>
             <div>
                 <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                    HydroGrid <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Sim v1.0</span>
+                    HydroGrid <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Sim v2.0</span>
                 </h1>
                 <p class="text-xs text-slate-400">Geospatial Elevation & Cellular Automata Flood Propagation Simulator</p>
             </div>
@@ -57,16 +61,18 @@
                     <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                         <i class="fa-solid fa-map-location-dot text-blue-400"></i> 1. Geographic Region
                     </h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">Latitude</label>
-                            <input type="number" id="input-lat" step="0.0001" value="45.4408" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                    
+                    <!-- New Interactive Selection Banner -->
+                    <div class="bg-blue-950/50 border border-blue-500/30 rounded-lg p-3 text-xs text-blue-200 space-y-2">
+                        <div class="flex items-center justify-between font-semibold">
+                            <span class="flex items-center gap-1.5"><i class="fa-solid fa-draw-polygon text-blue-400"></i> Custom Area Selection</span>
+                            <span id="selection-mode-status" class="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">Enabled</span>
                         </div>
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">Longitude</label>
-                            <input type="number" id="input-lng" step="0.0001" value="12.3155" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
-                        </div>
+                        <p class="text-[11px] text-slate-300 leading-relaxed">
+                            Click the <strong class="text-white">Rectangle tool</strong> on the top-right of the map to draw your custom region, or pick a preset below:
+                        </p>
                     </div>
+
                     <div>
                         <label class="block text-xs text-slate-400 mb-1">Preset Locations</label>
                         <select id="preset-locations" onchange="app.loadPreset(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
@@ -76,6 +82,7 @@
                             <option value="nile">Nile River Delta, Egypt (Flat Basin)</option>
                         </select>
                     </div>
+
                     <div class="grid grid-cols-2 gap-3 pt-1">
                         <div>
                             <label class="block text-xs text-slate-400 mb-1">Grid Resolution</label>
@@ -86,12 +93,16 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs text-slate-400 mb-1">Grid Span (km)</label>
-                            <input type="number" id="input-span" step="0.1" min="0.5" max="10" value="2.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                            <label class="block text-xs text-slate-400 mb-1">Active Region Span</label>
+                            <div id="active-span-display" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-cyan-400 flex items-center justify-between">
+                                <span>2.0 km</span>
+                                <i class="fa-solid fa-check text-xs text-emerald-400"></i>
+                            </div>
                         </div>
                     </div>
+                    
                     <button onclick="app.fetchElevationAndBuildGrid()" id="btn-fetch" class="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 text-sm">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> Load Elevation Grid
+                        <i class="fa-solid fa-cloud-arrow-down"></i> Reload Elevation Grid
                     </button>
                 </div>
 
@@ -246,12 +257,12 @@
             </div>
             <div class="text-sm text-slate-300 space-y-3 leading-relaxed">
                 <p>
-                    <strong>HydroGrid</strong> simulates coastal or riverine flooding over real-world topography retrieved via OpenStreetMap coordinates and public elevation APIs.
+                    <strong>HydroGrid v2.0</strong> lets you draw any custom bounding box on the map using the Leaflet Draw rectangle tool, or select preset locations.
                 </p>
                 <ul class="list-disc pl-5 space-y-1 text-slate-300 text-xs">
-                    <li><strong>Elevation Data:</strong> Fetches sample elevation matrices over your chosen bounding box using free elevation web services.</li>
-                    <li><strong>Cellular Automata Engine:</strong> Water propagates from higher to lower neighboring cells based on hydraulic head differences (elevation + water depth).</li>
-                    <li><strong>Interactive Controls:</strong> Adjust inflow rates, initial reservoir levels, and drainage coefficients in real time.</li>
+                    <li><strong>Custom Area Selection:</strong> Use the drawing rectangle tool on the top-left of the map to target any river basin, coastline, or urban area.</li>
+                    <li><strong>Elevation Data:</strong> Fetches elevation matrices over your custom region from public elevation services.</li>
+                    <li><strong>Cellular Automata Engine:</strong> Simulates realistic flood propagation based on hydraulic head differences.</li>
                 </ul>
             </div>
             <div class="pt-2 flex justify-end">
@@ -265,8 +276,12 @@
         class FloodSimulationApp {
             constructor() {
                 this.map = null;
-                this.gridCells = []; // 2D array of cell objects
+                this.gridCells = [];
                 this.gridSize = 20;
+                this.currentBounds = {
+                    minLat: 45.4000, maxLat: 45.4800,
+                    minLng: 12.2700, maxLng: 12.3600
+                };
                 this.spanKm = 2.0;
                 this.simInterval = null;
                 this.stepCount = 0;
@@ -279,13 +294,14 @@
                 this.minElev = 0;
                 this.maxElev = 100;
                 this.rectanglesLayer = L.layerGroup();
+                this.drawnItems = new L.FeatureGroup();
                 this.overlayMode = 'grid';
                 this.selectedCell = null;
                 this.presets = {
-                    venice: { lat: 45.4408, lng: 12.3155, span: 2.0, name: 'Venice Lagoon' },
-                    grandcanyon: { lat: 36.0544, lng: -112.1401, span: 3.0, name: 'Grand Canyon' },
-                    seattle: { lat: 47.6062, lng: -122.3321, span: 2.5, name: 'Seattle Waterfront' },
-                    nile: { lat: 30.8025, lng: 31.0200, span: 4.0, name: 'Nile Delta' }
+                    venice: { minLat: 45.4000, maxLat: 45.4800, minLng: 12.2700, maxLng: 12.3600, name: 'Venice Lagoon' },
+                    grandcanyon: { minLat: 36.0200, maxLat: 36.0900, minLng: -112.1800, maxLng: -112.1000, name: 'Grand Canyon' },
+                    seattle: { minLat: 47.5700, maxLat: 47.6400, minLng: -122.3700, maxLng: -122.2900, name: 'Seattle Waterfront' },
+                    nile: { minLat: 30.7500, maxLat: 30.8500, minLng: 30.9700, maxLng: 31.0700, name: 'Nile Delta' }
                 };
 
                 this.initMap();
@@ -293,22 +309,73 @@
             }
 
             initMap() {
-                // Initialize Leaflet Map centered on Venice default
                 this.map = L.map('map', {
                     zoomControl: false
                 }).setView([45.4408, 12.3155], 13);
 
-                // Add CartoDB Dark Matter / OSM tiles
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                     maxZoom: 19
                 }).addTo(this.map);
 
                 L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+                this.map.addLayer(this.drawnItems);
                 this.rectanglesLayer.addTo(this.map);
 
-                // Auto load initial preset
-                setTimeout(() => this.fetchElevationAndBuildGrid(), 500);
+                // Initialize Leaflet Draw Control for custom area bounding box selection
+                const drawControl = new L.Control.Draw({
+                    position: 'topleft',
+                    draw: {
+                        polyline: false,
+                        polygon: false,
+                        circle: false,
+                        marker: false,
+                        circlemarker: false,
+                        rectangle: {
+                            shapeOptions: {
+                                clickable: true,
+                                color: '#3b82f6',
+                                weight: 2,
+                                fillColor: '#3b82f6',
+                                fillOpacity: 0.1
+                            }
+                        }
+                    },
+                    edit: {
+                        featureGroup: this.drawnItems,
+                        edit: false,
+                        remove: true
+                    }
+                });
+                this.map.addControl(drawControl);
+
+                // Handle custom drawn rectangle event
+                this.map.on(L.Draw.Event.CREATED, (e) => {
+                    const layer = e.layer;
+                    this.drawnItems.clearLayers();
+                    this.drawnItems.addLayer(layer);
+
+                    const bounds = layer.getBounds();
+                    const sw = bounds.getSouthWest();
+                    const ne = bounds.getNorthEast();
+
+                    this.currentBounds = {
+                        minLat: sw.lat,
+                        maxLat: ne.lat,
+                        minLng: sw.lng,
+                        maxLng: ne.lng
+                    };
+
+                    // Calculate span in km
+                    const latDiff = ne.lat - sw.lat;
+                    this.spanKm = parseFloat((latDiff * 111.0).toFixed(2));
+                    document.getElementById('active-span-display').innerHTML = `<span>${this.spanKm} km</span><i class="fa-solid fa-check text-xs text-emerald-400"></i>`;
+
+                    this.fetchElevationAndBuildGrid();
+                });
+
+                // Auto load initial preset (Venice)
+                setTimeout(() => this.loadPreset('venice'), 500);
             }
 
             setupEventListeners() {
@@ -324,10 +391,26 @@
             loadPreset(key) {
                 const p = this.presets[key];
                 if (!p) return;
-                document.getElementById('input-lat').value = p.lat;
-                document.getElementById('input-lng').value = p.lng;
-                document.getElementById('input-span').value = p.span;
-                this.map.setView([p.lat, p.lng], 13);
+                this.currentBounds = { minLat: p.minLat, maxLat: p.maxLat, minLng: p.minLng, maxLng: p.maxLng };
+                
+                const centerLat = (p.minLat + p.maxLat) / 2;
+                const centerLng = (p.minLng + p.maxLng) / 2;
+                this.map.setView([centerLat, centerLng], 13);
+
+                // Draw preset bounding box on map
+                this.drawnItems.clearLayers();
+                const rect = L.rectangle([[p.minLat, p.minLng], [p.maxLat, p.maxLng]], {
+                    color: '#3b82f6',
+                    weight: 2,
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.1
+                });
+                this.drawnItems.addLayer(rect);
+
+                const latDiff = p.maxLat - p.minLat;
+                this.spanKm = parseFloat((latDiff * 111.0).toFixed(2));
+                document.getElementById('active-span-display').innerHTML = `<span>${this.spanKm} km</span><i class="fa-solid fa-check text-xs text-emerald-400"></i>`;
+
                 this.fetchElevationAndBuildGrid();
             }
 
@@ -363,31 +446,19 @@
 
             async fetchElevationAndBuildGrid() {
                 this.pauseSimulation();
-                this.setStatus('Loading elevation data...', 'bg-amber-400');
+                this.setStatus('Loading elevation data for selected area...', 'bg-amber-400');
                 
-                const lat = parseFloat(document.getElementById('input-lat').value);
-                const lng = parseFloat(document.getElementById('input-lng').value);
                 this.gridSize = parseInt(document.getElementById('input-grid-size').value);
-                this.spanKm = parseFloat(document.getElementById('input-span').value);
+                const { minLat, maxLat, minLng, maxLng } = this.currentBounds;
 
-                this.map.setView([lat, lng], 13);
+                const spanDegLat = maxLat - minLat;
+                const spanDegLng = maxLng - minLng;
 
-                // Calculate bounding box in degrees (approximate 1 deg lat = 111 km)
-                const spanDegLat = (this.spanKm / 111.0);
-                const spanDegLng = (this.spanKm / (111.0 * Math.cos(lat * Math.PI / 180)));
-
-                const minLat = lat - spanDegLat / 2;
-                const maxLat = lat + spanDegLat / 2;
-                const minLng = lng - spanDegLng / 2;
-                const maxLng = lng + spanDegLng / 2;
-
-                // Build grid coordinates for batch elevation query
                 let locationsList = [];
                 let tempGrid = [];
 
                 for (let r = 0; r < this.gridSize; r++) {
                     let row = [];
-                    // Latitude decreases as r increases from top to bottom
                     let cellLat = maxLat - (r + 0.5) * (spanDegLat / this.gridSize);
                     for (let c = 0; c < this.gridSize; c++) {
                         let cellLng = minLng + (c + 0.5) * (spanDegLng / this.gridSize);
@@ -410,8 +481,6 @@
                 }
 
                 try {
-                    // Fetch from Open-Elevation API (batched or public endpoint)
-                    // We split into chunks of 100 locations if needed, or query directly
                     let elevations = await this.queryElevationAPI(locationsList);
                     
                     let idx = 0;
@@ -437,19 +506,17 @@
                     this.resetSimulationState();
                     this.renderGridLayers();
 
-                    // Enable buttons
                     document.getElementById('btn-start').disabled = false;
                     document.getElementById('btn-reset').disabled = false;
                     this.setStatus('Grid ready for simulation', 'bg-emerald-400');
 
                 } catch (err) {
-                    console.warn('API fetch failed or rate-limited. Falling back to synthetic terrain generator.', err);
+                    console.warn('API fetch failed. Falling back to synthetic terrain generator.', err);
                     this.generateSyntheticTerrain(minLat, maxLat, minLng, maxLng);
                 }
             }
 
             async queryElevationAPI(locations) {
-                // Open-Elevation API accepts POST with JSON { locations: [{latitude, longitude}, ...] }
                 const response = await fetch('https://api.open-elevation.com/api/v1/lookup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -473,7 +540,6 @@
                     for (let c = 0; c < this.gridSize; c++) {
                         let cellLng = minLng + (c + 0.5) * (spanLng / this.gridSize);
                         
-                        // Synthetic basin/valley generator using sine/cosine harmonics
                         let nx = c / this.gridSize - 0.5;
                         let ny = r / this.gridSize - 0.5;
                         let distFromCenter = Math.sqrt(nx*nx + ny*ny);
@@ -515,7 +581,6 @@
 
             determineSourceCell() {
                 if (this.sourceMode === 'lowest') {
-                    // Find absolute lowest elevation cell
                     let minVal = Infinity;
                     let bestR = 0, bestC = 0;
                     for (let r = 0; r < this.gridSize; r++) {
@@ -532,7 +597,6 @@
                     let mid = Math.floor(this.gridSize / 2);
                     this.sourceCell = { r: mid, c: mid };
                 } else {
-                    // Default to center if click mode hasn't selected yet
                     let mid = Math.floor(this.gridSize / 2);
                     this.sourceCell = { r: mid, c: mid };
                 }
@@ -564,7 +628,6 @@
                             this.inspectCell(cell);
                         });
 
-                        // Highlight source cell
                         if (r === this.sourceCell.r && c === this.sourceCell.c) {
                             rect.setStyle({ color: '#f59e0b', weight: 2.5 });
                         }
@@ -576,19 +639,16 @@
 
             getCellColor(cell) {
                 if (cell.water > 0.05) {
-                    // Color coded by water depth
-                    if (cell.water > 3.0) return '#0284c7'; // Deep blue
-                    if (cell.water > 1.0) return '#38bdf8'; // Medium blue
-                    return '#bae6fd'; // Shallow cyan
+                    if (cell.water > 3.0) return '#0284c7';
+                    if (cell.water > 1.0) return '#38bdf8';
+                    return '#bae6fd';
                 } else {
-                    // Color coded by elevation normalized between min and max
                     let norm = (cell.elevation - this.minElev) / (this.maxElev - this.minElev || 1);
                     norm = Math.max(0, Math.min(1, norm));
                     
-                    // Terrain colormap (Low=emerald/green, Mid=yellow/tan, High=brown/rock)
-                    if (norm < 0.33) return '#15803d'; // Green valley
-                    if (norm < 0.66) return '#ca8a04'; // Terrain tan
-                    return '#78350f'; // Mountain brown
+                    if (norm < 0.33) return '#15803d';
+                    if (norm < 0.66) return '#ca8a04';
+                    return '#78350f';
                 }
             }
 
@@ -641,7 +701,6 @@
                         this.gridCells[r][c].water = 0;
                     }
                 }
-                // Add initial reservoir water to source cell
                 this.gridCells[this.sourceCell.r][this.sourceCell.c].water = this.initialDepth;
                 this.updateStats();
             }
@@ -656,10 +715,8 @@
                     }
                 }
 
-                // Inject continuous water at source cell
                 newWater[this.sourceCell.r][this.sourceCell.c] += (this.flowRate * 0.15);
 
-                // Cellular Automata Hydraulic Flow Algorithm (Flow based on water head difference)
                 const dr = [-1, 1, 0, 0];
                 const dc = [0, 0, -1, 1];
 
@@ -668,12 +725,10 @@
                         let cell = this.gridCells[r][c];
                         let totalHeadCurrent = cell.elevation + cell.water;
 
-                        // Apply drainage / infiltration
                         if (newWater[r][c] > 0) {
                             newWater[r][c] = Math.max(0, newWater[r][c] - (this.drainRate * 0.05));
                         }
 
-                        // Distribute to lower neighbors
                         for (let i = 0; i < 4; i++) {
                             let nr = r + dr[i];
                             let nc = c + dc[i];
@@ -684,7 +739,7 @@
 
                                 if (totalHeadCurrent > neighborHead) {
                                     let headDiff = totalHeadCurrent - neighborHead;
-                                    let transfer = headDiff * 0.25; // Flow coefficient
+                                    let transfer = headDiff * 0.25;
 
                                     if (newWater[r][c] >= transfer) {
                                         newWater[r][c] -= transfer;
@@ -696,7 +751,6 @@
                     }
                 }
 
-                // Commit water values back to grid
                 let totalVol = 0;
                 let floodedCount = 0;
                 let totalCells = this.gridSize * this.gridSize;
@@ -732,7 +786,6 @@
             }
         }
 
-        // Initialize Application on Window Load
         let app;
         window.onload = () => {
             app = new FloodSimulationApp();
