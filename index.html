@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoGrid Flood Simulation Engine</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS and JS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- FontAwesome for UI icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbar for control panels */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full bg-slate-900 text-slate-100 flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex items-center justify-between shrink-0 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-water text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    HydroGrid <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Sim v1.0</span>
+                </h1>
+                <p class="text-xs text-slate-400">Geospatial Elevation & Cellular Automata Flood Propagation Simulator</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="app.showInfoModal()" class="px-3 py-2 text-xs font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition flex items-center gap-1.5 border border-slate-600">
+                <i class="fa-solid fa-circle-info text-blue-400"></i> How it works
+            </button>
+            <div id="status-badge" class="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Ready
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+        
+        <!-- Sidebar Controls -->
+        <aside class="w-full lg:w-96 bg-slate-800/95 backdrop-blur border-r border-slate-700 flex flex-col z-10 shrink-0 shadow-2xl overflow-y-auto">
+            <div class="p-5 space-y-6">
+                
+                <!-- Section 1: Location & Bounding Box -->
+                <div class="space-y-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-blue-400"></i> 1. Geographic Region
+                    </h2>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Latitude</label>
+                            <input type="number" id="input-lat" step="0.0001" value="45.4408" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Longitude</label>
+                            <input type="number" id="input-lng" step="0.0001" value="12.3155" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Preset Locations</label>
+                        <select id="preset-locations" onchange="app.loadPreset(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                            <option value="venice">Venice Lagoon, Italy (Coastal / Low)</option>
+                            <option value="grandcanyon">Grand Canyon Rim, USA (High Relief)</option>
+                            <option value="seattle">Seattle Waterfront, USA (Urban Coastal)</option>
+                            <option value="nile">Nile River Delta, Egypt (Flat Basin)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Grid Resolution</label>
+                            <select id="input-grid-size" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                                <option value="15">15 × 15 Cells (Fast)</option>
+                                <option value="20" selected>20 × 20 Cells (Balanced)</option>
+                                <option value="25">25 × 25 Cells (Detailed)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Grid Span (km)</label>
+                            <input type="number" id="input-span" step="0.1" min="0.5" max="10" value="2.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                        </div>
+                    </div>
+                    <button onclick="app.fetchElevationAndBuildGrid()" id="btn-fetch" class="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 px-4 rounded-lg transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> Load Elevation Grid
+                    </button>
+                </div>
+
+                <hr class="border-slate-700">
+
+                <!-- Section 2: Flood Source & Parameters -->
+                <div class="space-y-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-droplet text-cyan-400"></i> 2. Flood Hydrology
+                    </h2>
+                    <div>
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Water Source Rate</span>
+                            <span id="val-flow" class="text-white font-mono">2.5 m³/s</span>
+                        </div>
+                        <input type="range" id="input-flow" min="0.5" max="10.0" step="0.5" value="2.5" oninput="app.updateParam('flow', this.value)" class="w-full accent-blue-500 bg-slate-700 h-2 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Initial Reservoir Depth</span>
+                            <span id="val-initial-depth" class="text-white font-mono">5.0 m</span>
+                        </div>
+                        <input type="range" id="input-initial-depth" min="1.0" max="20.0" step="1.0" value="5.0" oninput="app.updateParam('initialDepth', this.value)" class="w-full accent-blue-500 bg-slate-700 h-2 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Infiltration / Drainage Rate</span>
+                            <span id="val-drain" class="text-white font-mono">0.10 m/step</span>
+                        </div>
+                        <input type="range" id="input-drain" min="0.0" max="0.5" step="0.02" value="0.10" oninput="app.updateParam('drain', this.value)" class="w-full accent-blue-500 bg-slate-700 h-2 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Source Trigger Mode</label>
+                        <select id="input-source-mode" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition">
+                            <option value="lowest">Automatic Lowest Elevation Cell</option>
+                            <option value="center">Center Grid Cell</option>
+                            <option value="click">Click on Map Cell to Place Source</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr class="border-slate-700">
+
+                <!-- Section 3: Simulation Controls -->
+                <div class="space-y-3">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-play text-emerald-400"></i> 3. Simulation Control
+                    </h2>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="app.startSimulation()" id="btn-start" disabled class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 text-xs shadow-md">
+                            <i class="fa-solid fa-play"></i> Start
+                        </button>
+                        <button onclick="app.pauseSimulation()" id="btn-pause" disabled class="bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 text-xs shadow-md">
+                            <i class="fa-solid fa-pause"></i> Pause
+                        </button>
+                        <button onclick="app.resetSimulation()" id="btn-reset" disabled class="bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5 text-xs shadow-md">
+                            <i class="fa-solid fa-rotate-right"></i> Reset
+                        </button>
+                    </div>
+                    <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700/60 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Time Step</div>
+                            <div id="stat-step" class="text-base font-bold font-mono text-white">0</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Water Volume</div>
+                            <div id="stat-volume" class="text-base font-bold font-mono text-cyan-400">0 m³</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-slate-400 uppercase tracking-wide">Flooded Area</div>
+                            <div id="stat-flooded" class="text-base font-bold font-mono text-blue-400">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="bg-slate-900 p-3 rounded-lg border border-slate-700/60 space-y-2">
+                    <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                        <span>Visualization Legend</span>
+                        <span id="legend-range" class="text-[10px] text-slate-400 font-mono">Elev: 0m - 100m</span>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Terrain Elevation Gradient</span>
+                            <span class="text-cyan-400 font-medium">Water Depth Overlay</span>
+                        </div>
+                        <div class="h-3 w-full rounded-md bg-gradient-to-r from-emerald-800 via-yellow-600 to-amber-900 border border-slate-700"></div>
+                        <div class="flex justify-between text-[10px] text-slate-500">
+                            <span>Low Ground</span>
+                            <span>High Ground</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- Map & Grid Workspace -->
+        <main class="flex-1 relative flex flex-col">
+            <!-- Top View Switcher / Info Bar -->
+            <div class="absolute top-4 right-4 z-[400] bg-slate-800/90 backdrop-blur border border-slate-700 p-1.5 rounded-xl shadow-xl flex items-center gap-1">
+                <button onclick="app.setOverlayMode('grid')" id="mode-btn-grid" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white shadow transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-chess-board"></i> Grid Cells
+                </button>
+                <button onclick="app.setOverlayMode('map')" id="mode-btn-map" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-map"></i> Leaflet Base
+                </button>
+            </div>
+
+            <!-- Leaflet Map Container -->
+            <div id="map" class="w-full flex-1 z-10"></div>
+
+            <!-- Cell Inspector Modal/Card (Bottom Right) -->
+            <div id="cell-inspector" class="absolute bottom-6 right-6 z-[400] bg-slate-800/95 backdrop-blur border border-slate-700 p-4 rounded-xl shadow-2xl w-72 hidden transition-all duration-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-magnifying-glass-location text-blue-400"></i> Grid Cell Inspector
+                    </h3>
+                    <button onclick="app.closeInspector()" class="text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="space-y-2 text-xs font-mono">
+                    <div class="flex justify-between border-b border-slate-700 pb-1">
+                        <span class="text-slate-400">Coordinates:</span>
+                        <span id="inspect-coords" class="text-slate-200">-</span>
+                    </div>
+                    <div class="flex justify-between border-b border-slate-700 pb-1">
+                        <span class="text-slate-400">Terrain Elevation:</span>
+                        <span id="inspect-elev" class="text-emerald-400 font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between border-b border-slate-700 pb-1">
+                        <span class="text-slate-400">Water Depth:</span>
+                        <span id="inspect-water" class="text-cyan-400 font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Total Head (Elev + Water):</span>
+                        <span id="inspect-total" class="text-blue-300 font-bold">-</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-water text-blue-400"></i> About HydroGrid Simulation
+                </h3>
+                <button onclick="app.hideInfoModal()" class="text-slate-400 hover:text-white text-sm"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-sm text-slate-300 space-y-3 leading-relaxed">
+                <p>
+                    <strong>HydroGrid</strong> simulates coastal or riverine flooding over real-world topography retrieved via OpenStreetMap coordinates and public elevation APIs.
+                </p>
+                <ul class="list-disc pl-5 space-y-1 text-slate-300 text-xs">
+                    <li><strong>Elevation Data:</strong> Fetches sample elevation matrices over your chosen bounding box using free elevation web services.</li>
+                    <li><strong>Cellular Automata Engine:</strong> Water propagates from higher to lower neighboring cells based on hydraulic head differences (elevation + water depth).</li>
+                    <li><strong>Interactive Controls:</strong> Adjust inflow rates, initial reservoir levels, and drainage coefficients in real time.</li>
+                </ul>
+            </div>
+            <div class="pt-2 flex justify-end">
+                <button onclick="app.hideInfoModal()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-medium transition">Got it, let's explore</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application JavaScript Engine -->
+    <script>
+        class FloodSimulationApp {
+            constructor() {
+                this.map = null;
+                this.gridCells = []; // 2D array of cell objects
+                this.gridSize = 20;
+                this.spanKm = 2.0;
+                this.simInterval = null;
+                this.stepCount = 0;
+                this.isRunning = false;
+                this.flowRate = 2.5;
+                this.initialDepth = 5.0;
+                this.drainRate = 0.10;
+                this.sourceMode = 'lowest';
+                this.sourceCell = { r: 0, c: 0 };
+                this.minElev = 0;
+                this.maxElev = 100;
+                this.rectanglesLayer = L.layerGroup();
+                this.overlayMode = 'grid';
+                this.selectedCell = null;
+                this.presets = {
+                    venice: { lat: 45.4408, lng: 12.3155, span: 2.0, name: 'Venice Lagoon' },
+                    grandcanyon: { lat: 36.0544, lng: -112.1401, span: 3.0, name: 'Grand Canyon' },
+                    seattle: { lat: 47.6062, lng: -122.3321, span: 2.5, name: 'Seattle Waterfront' },
+                    nile: { lat: 30.8025, lng: 31.0200, span: 4.0, name: 'Nile Delta' }
+                };
+
+                this.initMap();
+                this.setupEventListeners();
+            }
+
+            initMap() {
+                // Initialize Leaflet Map centered on Venice default
+                this.map = L.map('map', {
+                    zoomControl: false
+                }).setView([45.4408, 12.3155], 13);
+
+                // Add CartoDB Dark Matter / OSM tiles
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    maxZoom: 19
+                }).addTo(this.map);
+
+                L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+                this.rectanglesLayer.addTo(this.map);
+
+                // Auto load initial preset
+                setTimeout(() => this.fetchElevationAndBuildGrid(), 500);
+            }
+
+            setupEventListeners() {
+                document.getElementById('input-source-mode').addEventListener('change', (e) => {
+                    this.sourceMode = e.target.value;
+                    if (this.gridCells.length > 0) {
+                        this.determineSourceCell();
+                        this.renderGridLayers();
+                    }
+                });
+            }
+
+            loadPreset(key) {
+                const p = this.presets[key];
+                if (!p) return;
+                document.getElementById('input-lat').value = p.lat;
+                document.getElementById('input-lng').value = p.lng;
+                document.getElementById('input-span').value = p.span;
+                this.map.setView([p.lat, p.lng], 13);
+                this.fetchElevationAndBuildGrid();
+            }
+
+            updateParam(param, val) {
+                if (param === 'flow') {
+                    this.flowRate = parseFloat(val);
+                    document.getElementById('val-flow').innerText = this.flowRate.toFixed(1) + ' m³/s';
+                } else if (param === 'initialDepth') {
+                    this.initialDepth = parseFloat(val);
+                    document.getElementById('val-initial-depth').innerText = this.initialDepth.toFixed(1) + ' m';
+                } else if (param === 'drain') {
+                    this.drainRate = parseFloat(val);
+                    document.getElementById('val-drain').innerText = this.drainRate.toFixed(2) + ' m/step';
+                }
+            }
+
+            setOverlayMode(mode) {
+                this.overlayMode = mode;
+                const gridBtn = document.getElementById('mode-btn-grid');
+                const mapBtn = document.getElementById('mode-btn-map');
+                if (mode === 'grid') {
+                    gridBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white shadow transition flex items-center gap-1.5";
+                    mapBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5";
+                } else {
+                    mapBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white shadow transition flex items-center gap-1.5";
+                    gridBtn.className = "px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition flex items-center gap-1.5";
+                }
+                this.renderGridLayers();
+            }
+
+            showInfoModal() { document.getElementById('info-modal').classList.remove('hidden'); }
+            hideInfoModal() { document.getElementById('info-modal').classList.add('hidden'); }
+
+            async fetchElevationAndBuildGrid() {
+                this.pauseSimulation();
+                this.setStatus('Loading elevation data...', 'bg-amber-400');
+                
+                const lat = parseFloat(document.getElementById('input-lat').value);
+                const lng = parseFloat(document.getElementById('input-lng').value);
+                this.gridSize = parseInt(document.getElementById('input-grid-size').value);
+                this.spanKm = parseFloat(document.getElementById('input-span').value);
+
+                this.map.setView([lat, lng], 13);
+
+                // Calculate bounding box in degrees (approximate 1 deg lat = 111 km)
+                const spanDegLat = (this.spanKm / 111.0);
+                const spanDegLng = (this.spanKm / (111.0 * Math.cos(lat * Math.PI / 180)));
+
+                const minLat = lat - spanDegLat / 2;
+                const maxLat = lat + spanDegLat / 2;
+                const minLng = lng - spanDegLng / 2;
+                const maxLng = lng + spanDegLng / 2;
+
+                // Build grid coordinates for batch elevation query
+                let locationsList = [];
+                let tempGrid = [];
+
+                for (let r = 0; r < this.gridSize; r++) {
+                    let row = [];
+                    // Latitude decreases as r increases from top to bottom
+                    let cellLat = maxLat - (r + 0.5) * (spanDegLat / this.gridSize);
+                    for (let c = 0; c < this.gridSize; c++) {
+                        let cellLng = minLng + (c + 0.5) * (spanDegLng / this.gridSize);
+                        
+                        locationsList.push({ latitude: cellLat, longitude: cellLng });
+                        row.push({
+                            r: r,
+                            c: c,
+                            lat: cellLat,
+                            lng: cellLng,
+                            elevation: 0,
+                            water: 0,
+                            bounds: [
+                                [maxLat - r * (spanDegLat / this.gridSize), minLng + c * (spanDegLng / this.gridSize)],
+                                [maxLat - (r + 1) * (spanDegLat / this.gridSize), minLng + (c + 1) * (spanDegLng / this.gridSize)]
+                            ]
+                        });
+                    }
+                    tempGrid.push(row);
+                }
+
+                try {
+                    // Fetch from Open-Elevation API (batched or public endpoint)
+                    // We split into chunks of 100 locations if needed, or query directly
+                    let elevations = await this.queryElevationAPI(locationsList);
+                    
+                    let idx = 0;
+                    let minE = Infinity;
+                    let maxE = -Infinity;
+
+                    for (let r = 0; r < this.gridSize; r++) {
+                        for (let c = 0; c < this.gridSize; c++) {
+                            let elev = elevations[idx++] ?? (10 + Math.sin(r)*5 + Math.cos(c)*5);
+                            tempGrid[r][c].elevation = Math.max(0, elev);
+                            if (tempGrid[r][c].elevation < minE) minE = tempGrid[r][c].elevation;
+                            if (tempGrid[r][c].elevation > maxE) maxE = tempGrid[r][c].elevation;
+                        }
+                    }
+
+                    this.minElev = minE;
+                    this.maxElev = Math.max(minE + 5, maxE);
+                    this.gridCells = tempGrid;
+
+                    document.getElementById('legend-range').innerText = `Elev: ${this.minElev.toFixed(1)}m - ${this.maxElev.toFixed(1)}m`;
+
+                    this.determineSourceCell();
+                    this.resetSimulationState();
+                    this.renderGridLayers();
+
+                    // Enable buttons
+                    document.getElementById('btn-start').disabled = false;
+                    document.getElementById('btn-reset').disabled = false;
+                    this.setStatus('Grid ready for simulation', 'bg-emerald-400');
+
+                } catch (err) {
+                    console.warn('API fetch failed or rate-limited. Falling back to synthetic terrain generator.', err);
+                    this.generateSyntheticTerrain(minLat, maxLat, minLng, maxLng);
+                }
+            }
+
+            async queryElevationAPI(locations) {
+                // Open-Elevation API accepts POST with JSON { locations: [{latitude, longitude}, ...] }
+                const response = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ locations: locations })
+                });
+                if (!response.ok) throw new Error('Elevation API request failed');
+                const data = await response.json();
+                return data.results.map(item => item.elevation);
+            }
+
+            generateSyntheticTerrain(minLat, maxLat, minLng, maxLng) {
+                let tempGrid = [];
+                let minE = Infinity;
+                let maxE = -Infinity;
+                const spanLat = maxLat - minLat;
+                const spanLng = maxLng - minLng;
+
+                for (let r = 0; r < this.gridSize; r++) {
+                    let row = [];
+                    let cellLat = maxLat - (r + 0.5) * (spanLat / this.gridSize);
+                    for (let c = 0; c < this.gridSize; c++) {
+                        let cellLng = minLng + (c + 0.5) * (spanLng / this.gridSize);
+                        
+                        // Synthetic basin/valley generator using sine/cosine harmonics
+                        let nx = c / this.gridSize - 0.5;
+                        let ny = r / this.gridSize - 0.5;
+                        let distFromCenter = Math.sqrt(nx*nx + ny*ny);
+                        let elev = Math.max(1, 40 * (distFromCenter * distFromCenter) + 5 * Math.sin(nx * 10) + 3 * Math.cos(ny * 8));
+                        elev = parseFloat(elev.toFixed(1));
+
+                        if (elev < minE) minE = elev;
+                        if (elev > maxE) maxE = elev;
+
+                        row.push({
+                            r: r,
+                            c: c,
+                            lat: cellLat,
+                            lng: cellLng,
+                            elevation: elev,
+                            water: 0,
+                            bounds: [
+                                [maxLat - r * (spanLat / this.gridSize), minLng + c * (spanLng / this.gridSize)],
+                                [maxLat - (r + 1) * (spanLat / this.gridSize), minLng + (c + 1) * (spanLng / this.gridSize)]
+                            ]
+                        });
+                    }
+                    tempGrid.push(row);
+                }
+
+                this.minElev = minE;
+                this.maxElev = maxE;
+                this.gridCells = tempGrid;
+
+                document.getElementById('legend-range').innerText = `Elev: ${this.minElev.toFixed(1)}m - ${this.maxElev.toFixed(1)}m (Synthetic)`;
+                this.determineSourceCell();
+                this.resetSimulationState();
+                this.renderGridLayers();
+
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-reset').disabled = false;
+                this.setStatus('Synthetic terrain generated', 'bg-emerald-400');
+            }
+
+            determineSourceCell() {
+                if (this.sourceMode === 'lowest') {
+                    // Find absolute lowest elevation cell
+                    let minVal = Infinity;
+                    let bestR = 0, bestC = 0;
+                    for (let r = 0; r < this.gridSize; r++) {
+                        for (let c = 0; c < this.gridSize; c++) {
+                            if (this.gridCells[r][c].elevation < minVal) {
+                                minVal = this.gridCells[r][c].elevation;
+                                bestR = r;
+                                bestC = c;
+                            }
+                        }
+                    }
+                    this.sourceCell = { r: bestR, c: bestC };
+                } else if (this.sourceMode === 'center') {
+                    let mid = Math.floor(this.gridSize / 2);
+                    this.sourceCell = { r: mid, c: mid };
+                } else {
+                    // Default to center if click mode hasn't selected yet
+                    let mid = Math.floor(this.gridSize / 2);
+                    this.sourceCell = { r: mid, c: mid };
+                }
+            }
+
+            renderGridLayers() {
+                this.rectanglesLayer.clearLayers();
+                if (this.gridCells.length === 0) return;
+
+                for (let r = 0; r < this.gridSize; r++) {
+                    for (let c = 0; c < this.gridSize; c++) {
+                        let cell = this.gridCells[r][c];
+                        let color = this.getCellColor(cell);
+                        let fillOpacity = this.overlayMode === 'grid' ? 0.65 : (cell.water > 0.05 ? 0.6 : 0.1);
+
+                        let rect = L.rectangle(cell.bounds, {
+                            color: cell.water > 0.05 ? '#0284c7' : '#334155',
+                            weight: 1,
+                            fillColor: color,
+                            fillOpacity: fillOpacity
+                        });
+
+                        rect.on('click', () => {
+                            if (this.sourceMode === 'click' && !this.isRunning) {
+                                this.sourceCell = { r: r, c: c };
+                                this.renderGridLayers();
+                                this.setStatus(`Source set to cell [${r}, ${c}]`, 'bg-blue-400');
+                            }
+                            this.inspectCell(cell);
+                        });
+
+                        // Highlight source cell
+                        if (r === this.sourceCell.r && c === this.sourceCell.c) {
+                            rect.setStyle({ color: '#f59e0b', weight: 2.5 });
+                        }
+
+                        this.rectanglesLayer.addLayer(rect);
+                    }
+                }
+            }
+
+            getCellColor(cell) {
+                if (cell.water > 0.05) {
+                    // Color coded by water depth
+                    if (cell.water > 3.0) return '#0284c7'; // Deep blue
+                    if (cell.water > 1.0) return '#38bdf8'; // Medium blue
+                    return '#bae6fd'; // Shallow cyan
+                } else {
+                    // Color coded by elevation normalized between min and max
+                    let norm = (cell.elevation - this.minElev) / (this.maxElev - this.minElev || 1);
+                    norm = Math.max(0, Math.min(1, norm));
+                    
+                    // Terrain colormap (Low=emerald/green, Mid=yellow/tan, High=brown/rock)
+                    if (norm < 0.33) return '#15803d'; // Green valley
+                    if (norm < 0.66) return '#ca8a04'; // Terrain tan
+                    return '#78350f'; // Mountain brown
+                }
+            }
+
+            inspectCell(cell) {
+                this.selectedCell = cell;
+                document.getElementById('cell-inspector').classList.remove('hidden');
+                document.getElementById('inspect-coords').innerText = `${cell.lat.toFixed(4)}, ${cell.lng.toFixed(4)}`;
+                document.getElementById('inspect-elev').innerText = `${cell.elevation.toFixed(1)} m`;
+                document.getElementById('inspect-water').innerText = `${cell.water.toFixed(2)} m`;
+                document.getElementById('inspect-total').innerText = `${(cell.elevation + cell.water).toFixed(1)} m`;
+            }
+
+            closeInspector() {
+                document.getElementById('cell-inspector').classList.add('hidden');
+                this.selectedCell = null;
+            }
+
+            startSimulation() {
+                if (this.isRunning) return;
+                this.isRunning = true;
+                document.getElementById('btn-start').disabled = true;
+                document.getElementById('btn-pause').disabled = false;
+                this.setStatus('Simulation running...', 'bg-blue-400 animate-pulse');
+
+                this.simInterval = setInterval(() => {
+                    this.runSimulationStep();
+                }, 200);
+            }
+
+            pauseSimulation() {
+                if (!this.isRunning) return;
+                this.isRunning = false;
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-pause').disabled = true;
+                this.setStatus('Simulation paused', 'bg-amber-400');
+                if (this.simInterval) clearInterval(this.simInterval);
+            }
+
+            resetSimulation() {
+                this.pauseSimulation();
+                this.resetSimulationState();
+                this.renderGridLayers();
+                this.setStatus('Simulation reset', 'bg-emerald-400');
+            }
+
+            resetSimulationState() {
+                this.stepCount = 0;
+                for (let r = 0; r < this.gridSize; r++) {
+                    for (let c = 0; c < this.gridSize; c++) {
+                        this.gridCells[r][c].water = 0;
+                    }
+                }
+                // Add initial reservoir water to source cell
+                this.gridCells[this.sourceCell.r][this.sourceCell.c].water = this.initialDepth;
+                this.updateStats();
+            }
+
+            runSimulationStep() {
+                this.stepCount++;
+                let newWater = [];
+                for (let r = 0; r < this.gridSize; r++) {
+                    newWater[r] = new Float32Array(this.gridSize);
+                    for (let c = 0; c < this.gridSize; c++) {
+                        newWater[r][c] = this.gridCells[r][c].water;
+                    }
+                }
+
+                // Inject continuous water at source cell
+                newWater[this.sourceCell.r][this.sourceCell.c] += (this.flowRate * 0.15);
+
+                // Cellular Automata Hydraulic Flow Algorithm (Flow based on water head difference)
+                const dr = [-1, 1, 0, 0];
+                const dc = [0, 0, -1, 1];
+
+                for (let r = 0; r < this.gridSize; r++) {
+                    for (let c = 0; c < this.gridSize; c++) {
+                        let cell = this.gridCells[r][c];
+                        let totalHeadCurrent = cell.elevation + cell.water;
+
+                        // Apply drainage / infiltration
+                        if (newWater[r][c] > 0) {
+                            newWater[r][c] = Math.max(0, newWater[r][c] - (this.drainRate * 0.05));
+                        }
+
+                        // Distribute to lower neighbors
+                        for (let i = 0; i < 4; i++) {
+                            let nr = r + dr[i];
+                            let nc = c + dc[i];
+
+                            if (nr >= 0 && nr < this.gridSize && nc >= 0 && nc < this.gridSize) {
+                                let neighbor = this.gridCells[nr][nc];
+                                let neighborHead = neighbor.elevation + newWater[nr][nc];
+
+                                if (totalHeadCurrent > neighborHead) {
+                                    let headDiff = totalHeadCurrent - neighborHead;
+                                    let transfer = headDiff * 0.25; // Flow coefficient
+
+                                    if (newWater[r][c] >= transfer) {
+                                        newWater[r][c] -= transfer;
+                                        newWater[nr][nc] += transfer;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Commit water values back to grid
+                let totalVol = 0;
+                let floodedCount = 0;
+                let totalCells = this.gridSize * this.gridSize;
+
+                for (let r = 0; r < this.gridSize; r++) {
+                    for (let c = 0; c < this.gridSize; c++) {
+                        this.gridCells[r][c].water = Math.max(0, newWater[r][c]);
+                        let w = this.gridCells[r][c].water;
+                        if (w > 0.05) {
+                            floodedCount++;
+                            totalVol += w;
+                        }
+                    }
+                }
+
+                this.renderGridLayers();
+                this.updateStats(totalVol, (floodedCount / totalCells) * 100);
+
+                if (this.selectedCell) {
+                    this.inspectCell(this.selectedCell);
+                }
+            }
+
+            updateStats(vol = 0, floodedPct = 0) {
+                document.getElementById('stat-step').innerText = this.stepCount;
+                document.getElementById('stat-volume').innerText = `${Math.round(vol * 100)} m³`;
+                document.getElementById('stat-flooded').innerText = `${floodedPct.toFixed(1)}%`;
+            }
+
+            setStatus(text, badgeClass) {
+                const badge = document.getElementById('status-badge');
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full ${badgeClass}"></span> ${text}`;
+            }
+        }
+
+        // Initialize Application on Window Load
+        let app;
+        window.onload = () => {
+            app = new FloodSimulationApp();
+        };
+    </script>
+
+</body>
+</html>
